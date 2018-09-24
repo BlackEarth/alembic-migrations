@@ -1,7 +1,7 @@
 import textwrap
 import warnings
 import inspect
-import uuid
+from datetime import datetime
 import collections
 
 from .compat import callable, exec_, string_types, with_metaclass
@@ -81,7 +81,7 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
             num_defaults += len(spec[3])
         name_args = spec[0]
         if num_defaults:
-            defaulted_vals = name_args[0 - num_defaults:]
+            defaulted_vals = name_args[0 - num_defaults :]
         else:
             defaulted_vals = ()
 
@@ -125,7 +125,7 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
 
                 args = list(args)
                 if spec[3]:
-                    pos_only = spec[0][:-len(spec[3])]
+                    pos_only = spec[0][: -len(spec[3])]
                 else:
                     pos_only = spec[0]
                 for arg in pos_only:
@@ -156,11 +156,11 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
             return _proxy.%(name)s(%(apply_kw)s)
             e
         """ % {
-            'name': name,
-            'translate': translate_str,
-            'args': outer_args,
-            'apply_kw': inner_args,
-            'doc': fn.__doc__,
+                'name': name,
+                'translate': translate_str,
+                'args': outer_args,
+                'apply_kw': inner_args,
+                'doc': fn.__doc__,
         })
         lcl = {}
         exec_(func_text, globals_, lcl)
@@ -181,7 +181,7 @@ def asbool(value):
 
 
 def rev_id():
-    return uuid.uuid4().hex[-12:]
+    return datetime.now().strftime("%Y%m%d%H%M%S%f")  # ordered but not a sequence
 
 
 def to_list(x, default=None):
@@ -199,11 +199,11 @@ def to_tuple(x, default=None):
     if x is None:
         return default
     elif isinstance(x, string_types):
-        return (x, )
+        return (x,)
     elif isinstance(x, collections.Iterable):
         return tuple(x)
     else:
-        return (x, )
+        return (x,)
 
 
 def unique_list(seq, hashfunc=None):
@@ -258,7 +258,7 @@ class immutabledict(dict):
         pass
 
     def __reduce__(self):
-        return immutabledict, (dict(self), )
+        return immutabledict, (dict(self),)
 
     def union(self, d):
         if not self:
