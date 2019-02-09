@@ -1,12 +1,16 @@
-import textwrap
-import warnings
-import inspect
-from datetime import datetime
 import collections
+import textwrap
+import uuid
+import warnings
+from datetime import datetime
 
-from .compat import callable, exec_, string_types, with_metaclass
-
+from .compat import callable
+from .compat import collections_abc
+from .compat import exec_
+from .compat import inspect_formatargspec
 from .compat import inspect_getargspec
+from .compat import string_types
+from .compat import with_metaclass
 
 
 class _ModuleClsMeta(type):
@@ -35,23 +39,21 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
     def _install_proxy(self):
         attr_names, modules = self._setups[self.__class__]
         for globals_, locals_ in modules:
-            globals_['_proxy'] = self
+            globals_["_proxy"] = self
             for attr_name in attr_names:
                 globals_[attr_name] = getattr(self, attr_name)
 
     def _remove_proxy(self):
         attr_names, modules = self._setups[self.__class__]
         for globals_, locals_ in modules:
-            globals_['_proxy'] = None
+            globals_["_proxy"] = None
             for attr_name in attr_names:
                 del globals_[attr_name]
 
     @classmethod
     def create_module_class_proxy(cls, globals_, locals_):
         attr_names, modules = cls._setups[cls]
-        modules.append(
-            (globals_, locals_)
-        )
+        modules.append((globals_, locals_))
         cls._setup_proxy(globals_, locals_, attr_names)
 
     @classmethod
@@ -61,11 +63,12 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
 
     @classmethod
     def _add_proxied_attribute(cls, methname, globals_, locals_, attr_names):
-        if not methname.startswith('_'):
+        if not methname.startswith("_"):
             meth = getattr(cls, methname)
             if callable(meth):
                 locals_[methname] = cls._create_method_proxy(
-                    methname, globals_, locals_)
+                    methname, globals_, locals_
+                )
             else:
                 attr_names.add(methname)
 
@@ -73,9 +76,9 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
     def _create_method_proxy(cls, name, globals_, locals_):
         fn = getattr(cls, name)
         spec = inspect_getargspec(fn)
-        if spec[0] and spec[0][0] == 'self':
+        if spec[0] and spec[0][0] == "self":
             spec[0].pop(0)
-        args = inspect.formatargspec(*spec)
+        args = inspect_formatargspec(*spec)
         num_defaults = 0
         if spec[3]:
             num_defaults += len(spec[3])
@@ -85,20 +88,24 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
         else:
             defaulted_vals = ()
 
-        apply_kw = inspect.formatargspec(
-            name_args, spec[1], spec[2],
+        apply_kw = inspect_formatargspec(
+            name_args,
+            spec[1],
+            spec[2],
             defaulted_vals,
-            formatvalue=lambda x: '=' + x)
+            formatvalue=lambda x: "=" + x,
+        )
 
         def _name_error(name):
             raise NameError(
                 "Can't invoke function '%s', as the proxy object has "
                 "not yet been "
                 "established for the Alembic '%s' class.  "
-                "Try placing this code inside a callable." % (
-                    name, cls.__name__
-                ))
-        globals_['_name_error'] = _name_error
+                "Try placing this code inside a callable."
+                % (name, cls.__name__)
+            )
+
+        globals_["_name_error"] = _name_error
 
         translations = getattr(fn, "_legacy_translations", [])
         if translations:
@@ -106,7 +113,7 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
             translate_str = "args, kw = _translate(%r, %r, %r, args, kw)" % (
                 fn.__name__,
                 tuple(spec),
-                translations
+                translations,
             )
 
             def translate(fn_name, spec, translations, args, kw):
@@ -117,9 +124,8 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
                     if oldname in kw:
                         warnings.warn(
                             "Argument %r is now named %r "
-                            "for method %s()." % (
-                                oldname, newname, fn_name
-                            ))
+                            "for method %s()." % (oldname, newname, fn_name)
+                        )
                         return_kw[newname] = kw.pop(oldname)
                 return_kw.update(kw)
 
@@ -135,17 +141,20 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
                         except IndexError:
                             raise TypeError(
                                 "missing required positional argument: %s"
-                                % arg)
+                                % arg
+                            )
                 return_args.extend(args)
 
                 return return_args, return_kw
-            globals_['_translate'] = translate
+
+            globals_["_translate"] = translate
         else:
             outer_args = args[1:-1]
             inner_args = apply_kw[1:-1]
             translate_str = ""
 
-        func_text = textwrap.dedent("""\
+        func_text = textwrap.dedent(
+            """\
         def %(name)s(%(args)s):
             %(doc)r
             %(translate)s
@@ -155,13 +164,15 @@ class ModuleClsProxy(with_metaclass(_ModuleClsMeta)):
                 _name_error('%(name)s')
             return _proxy.%(name)s(%(apply_kw)s)
             e
-        """ % {
-                'name': name,
-                'translate': translate_str,
-                'args': outer_args,
-                'apply_kw': inner_args,
-                'doc': fn.__doc__,
-        })
+        """
+            % {
+                "name": name,
+                "translate": translate_str,
+                "args": outer_args,
+                "apply_kw": inner_args,
+                "doc": fn.__doc__,
+            }
+        )
         lcl = {}
         exec_(func_text, globals_, lcl)
         return lcl[name]
@@ -176,12 +187,12 @@ def _with_legacy_names(translations):
 
 
 def asbool(value):
-    return value is not None and \
-        value.lower() == 'true'
+    return value is not None and value.lower() == "true"
 
 
 def rev_id():
-    return datetime.now().strftime("%Y%m%d%H%M%S%f")  # ordered but not a sequence
+    # timestamp: ordered but not a sequence, unique to microsecond resolution
+    return datetime.now().strftime("%Y%m%d%H%M%S%f")
 
 
 def to_list(x, default=None):
@@ -189,7 +200,7 @@ def to_list(x, default=None):
         return default
     elif isinstance(x, string_types):
         return [x]
-    elif isinstance(x, collections.Iterable):
+    elif isinstance(x, collections_abc.Iterable):
         return list(x)
     else:
         return [x]
@@ -200,7 +211,7 @@ def to_tuple(x, default=None):
         return default
     elif isinstance(x, string_types):
         return (x,)
-    elif isinstance(x, collections.Iterable):
+    elif isinstance(x, collections_abc.Iterable):
         return tuple(x)
     else:
         return (x,)
@@ -210,18 +221,17 @@ def unique_list(seq, hashfunc=None):
     seen = set()
     seen_add = seen.add
     if not hashfunc:
-        return [x for x in seq
-                if x not in seen
-                and not seen_add(x)]
+        return [x for x in seq if x not in seen and not seen_add(x)]
     else:
-        return [x for x in seq
-                if hashfunc(x) not in seen
-                and not seen_add(hashfunc(x))]
+        return [
+            x
+            for x in seq
+            if hashfunc(x) not in seen and not seen_add(hashfunc(x))
+        ]
 
 
 def dedupe_tuple(tup):
     return tuple(unique_list(tup))
-
 
 
 class memoized_property(object):
@@ -241,13 +251,12 @@ class memoized_property(object):
 
 
 class immutabledict(dict):
-
     def _immutable(self, *arg, **kw):
         raise TypeError("%s object is immutable" % self.__class__.__name__)
 
-    __delitem__ = __setitem__ = __setattr__ = \
-        clear = pop = popitem = setdefault = \
-        update = _immutable
+    __delitem__ = (
+        __setitem__
+    ) = __setattr__ = clear = pop = popitem = setdefault = update = _immutable
 
     def __new__(cls, *args):
         new = dict.__new__(cls)
@@ -277,7 +286,7 @@ class Dispatcher(object):
         self._registry = {}
         self.uselist = uselist
 
-    def dispatch_for(self, target, qualifier='default'):
+    def dispatch_for(self, target, qualifier="default"):
         def decorate(fn):
             if self.uselist:
                 self._registry.setdefault((target, qualifier), []).append(fn)
@@ -285,9 +294,10 @@ class Dispatcher(object):
                 assert (target, qualifier) not in self._registry
                 self._registry[(target, qualifier)] = fn
             return fn
+
         return decorate
 
-    def dispatch(self, obj, qualifier='default'):
+    def dispatch(self, obj, qualifier="default"):
 
         if isinstance(obj, string_types):
             targets = [obj]
@@ -297,20 +307,20 @@ class Dispatcher(object):
             targets = type(obj).__mro__
 
         for spcls in targets:
-            if qualifier != 'default' and (spcls, qualifier) in self._registry:
-                return self._fn_or_list(
-                    self._registry[(spcls, qualifier)])
-            elif (spcls, 'default') in self._registry:
-                return self._fn_or_list(
-                    self._registry[(spcls, 'default')])
+            if qualifier != "default" and (spcls, qualifier) in self._registry:
+                return self._fn_or_list(self._registry[(spcls, qualifier)])
+            elif (spcls, "default") in self._registry:
+                return self._fn_or_list(self._registry[(spcls, "default")])
         else:
             raise ValueError("no dispatch function for object: %s" % obj)
 
     def _fn_or_list(self, fn_or_list):
         if self.uselist:
+
             def go(*arg, **kw):
                 for fn in fn_or_list:
                     fn(*arg, **kw)
+
             return go
         else:
             return fn_or_list
@@ -322,8 +332,7 @@ class Dispatcher(object):
         d = Dispatcher()
         if self.uselist:
             d._registry.update(
-                (k, [fn for fn in self._registry[k]])
-                for k in self._registry
+                (k, [fn for fn in self._registry[k]]) for k in self._registry
             )
         else:
             d._registry.update(self._registry)
